@@ -5,22 +5,14 @@ from torch.utils.data import Dataset
 import numpy as np
 import os
 
+
 class AutoFlowDataset(Dataset):
     def __init__(self, root_dir):
-        """
-        Inicjalizacja datasetu
-        :param root_dir: Ścieżka do katalogu głównego, gdzie znajdują się dane.
-        """
         self.root_dir = root_dir
         self.samples = os.listdir(root_dir)
 
     @staticmethod
     def read_flo_file(file_path):
-        """
-        Odczytuje plik .flo
-        :param file_path: Ścieżka do pliku .flo
-        :return: Tensor optical flow.
-        """
         with open(file_path, 'rb') as f:
             magic = np.fromfile(f, np.float32, count=1)
             if magic != 202021.25:
