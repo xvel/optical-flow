@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 import numpy as np
 import os
+from torchvision.io import read_image
 
 
 class AutoFlowDataset(Dataset):
