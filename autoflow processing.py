@@ -3,11 +3,6 @@ import cv2
 import matplotlib.pyplot as plt
 
 def flow_to_color(flow):
-    """
-    Konwertuje wektor przepływu optycznego do kolorowego obrazu.
-    :param flow: Wektor przepływu optycznego o wymiarach (H, W, 2).
-    :return: Kolorowy obraz przepływu optycznego o wymiarach (H, W, 3).
-    """
     h, w = flow.shape[:2]
     hsv = np.zeros((h, w, 3), dtype=np.uint8)
     hsv[..., 1] = 255
@@ -51,22 +46,27 @@ def resize_flow_method(flow, new_size, step_size, method):
                 index = np.unravel_index(median_index, lengths.shape)
             elif method == 'min':
                 index = np.unravel_index(np.argmin(lengths, axis=None), lengths.shape)
+            elif method == 'mean':
+                mean_index = np.mean(block, axis=(0, 1))
+                index = (block.shape[0] // 2, block.shape[1] // 2)  # Ustaw środek bloku jako indeks
             
             resized_flow[i, j, :] = block[index[0], index[1], :]
 
     return resized_flow
 
-flow = read_flow_file('/mnt/d/datasety/autoflowaug/9sample_376/forward.npy')
+flow = read_flow_file('/mnt/d/datasety/autoflowaug/9sample_176/forward.npy')
 
 # Przeprowadzenie procesu zmniejszania rozdzielczości
 resized_max = resize_flow_method(flow, (18,32), 10, 'max')
 resized_median = resize_flow_method(flow, (18,32), 10, 'median')
 resized_min = resize_flow_method(flow, (18,32), 10, 'min')
+resized_mean = resize_flow_method(flow, (18,32), 10, 'mean')
 
 # Zapisanie wyników
 #np.save('resized_max.npy', resized_max)
 #np.save('resized_median.npy', resized_median)
 #np.save('resized_min.npy', resized_min)
+#np.save('resized_mean.npy', resized_mean)
 
 # Wizualizacja pliku wejściowego
 plt.imshow(flow_to_color(flow))
@@ -89,3 +89,52 @@ plt.imshow(flow_to_color(resized_min))
 plt.title('Resized Min Flow')
 plt.axis('off')
 plt.show()
+
+plt.imshow(flow_to_color(resized_mean))
+plt.title('Resized Mean Flow')
+plt.axis('off')
+plt.show()
+
+
+
+import os
+
+def process_dataset(dataset_dir):
+    total_files = 0
+    processed_files = 0
+
+    # Liczenie wszystkich plików do przetworzenia
+    for subdir in os.listdir(dataset_dir):
+        sub_dir_path = os.path.join(dataset_dir, subdir)
+        if os.path.isdir(sub_dir_path):
+            forward_path = os.path.join(sub_dir_path, 'forward.npy')
+            if os.path.exists(forward_path):
+                total_files += 1
+
+    # Przetwarzanie wszystkich katalogów w dataset_dir
+    for subdir in os.listdir(dataset_dir):
+        sub_dir_path = os.path.join(dataset_dir, subdir)
+        if os.path.isdir(sub_dir_path):
+            forward_path = os.path.join(sub_dir_path, 'forward.npy')
+            if os.path.exists(forward_path):
+                flow = read_flow_file(forward_path)
+                if flow is not None:
+                    resized_max = np.transpose(resize_flow_method(flow, (18,32), 10, 'max'), (2, 0, 1))
+                    resized_median = np.transpose(resize_flow_method(flow, (18,32), 10, 'median'), (2, 0, 1))
+                    resized_min = np.transpose(resize_flow_method(flow, (18,32), 10, 'min'), (2, 0, 1))
+                    resized_mean = np.transpose(resize_flow_method(flow, (18,32), 10, 'mean'), (2, 0, 1))
+
+                    processed_flow = np.concatenate([resized_max, resized_median, resized_min, resized_mean], axis=0)
+
+                    output_path = os.path.join(sub_dir_path, 'max_median_min_mean.npy')
+                    np.save(output_path, processed_flow.astype(np.float16))
+
+                    processed_files += 1
+                    if processed_files % 2000 == 0:  # Wyświetlanie postępu co 1000 plików
+                        print(f"Przetworzono {processed_files}/{total_files} plików.")
+
+    print("Przetwarzanie zakończone.")
+
+# Użycie funkcji do przetworzenia całego datasetu
+dataset_dir = '/mnt/d/datasety/autoflowaug'
+process_dataset(dataset_dir)
