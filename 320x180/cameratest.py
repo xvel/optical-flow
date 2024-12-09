@@ -14,9 +14,9 @@ model.load_state_dict(checkpoint)
 
 
 def process_frame(frame, prev_frame):
-    # Resize and normalize frames
-    frame_resized = cv2.resize(frame, (320, 180))
-    prev_frame_resized = cv2.resize(prev_frame, (320, 180))
+    # Resize frames to ensure they are consistent with model input size (640x360 in this case)
+    frame_resized = cv2.resize(frame, (640, 360))
+    prev_frame_resized = cv2.resize(prev_frame, (640, 360))
 
     # Convert to tensor and normalize to [0, 1]
     current_tensor = to_tensor(frame_resized).unsqueeze(0).to(device)
@@ -29,15 +29,15 @@ def process_frame(frame, prev_frame):
     # Extract first optical flow tensor (shape: 2x18x32)
     optical_flow = output[0, :2, :, :].cpu().numpy()
 
-    return optical_flow
+    return frame_resized, prev_frame_resized, optical_flow
 
 
 def draw_optical_flow(frame, flow, scale=1):
     h, w = frame.shape[:2]
-    step = 40
+    step = 20
 
     # Create a grid of points
-    y, x = np.mgrid[step//2:h:step, step//2:w:step]
+    y, x = np.mgrid[step // 2:h:step, step // 2:w:step]
 
     # Scale flow to match frame size
     flow = cv2.resize(flow.transpose(1, 2, 0), (w, h), interpolation=cv2.INTER_LINEAR)
@@ -51,6 +51,30 @@ def draw_optical_flow(frame, flow, scale=1):
             cv2.arrowedLine(frame, start_point, end_point, (0, 255, 0), 1, tipLength=0.3)
 
     return frame
+
+
+def draw_optical_flow_color(frame, flow):
+    h, w = frame.shape[:2]
+    flow = cv2.resize(flow.transpose(1, 2, 0), (w, h), interpolation=cv2.INTER_LINEAR)
+    # Rozdziel składowe przepływu optycznego
+    flow_x, flow_y = flow[..., 0], flow[..., 1]
+
+    # Oblicz wielkość (magnitude) i kąt (angle)
+    mag, ang = cv2.cartToPolar(flow_x, flow_y)
+
+    # Znormalizuj wielkość do zakresu [0, 255]
+    #mag_normalized = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
+
+    # Stwórz obraz HSV
+    hsv_image = np.zeros((h, w, 3), dtype=np.uint8)
+    hsv_image[..., 0] = ang * (180 / np.pi / 2)  # Przelicz kąt na stopnie dla zakresu Hue [0, 179]
+    hsv_image[..., 1] = 255                      # Stała saturacja
+    hsv_image[..., 2] = 2*mag.astype(np.uint8)  # Jasność bazująca na wielkości
+
+    # Konwertuj HSV na RGB
+    rgb_image = cv2.cvtColor(hsv_image, cv2.COLOR_HSV2BGR)
+
+    return rgb_image
 
 
 # Camera setup
@@ -76,19 +100,23 @@ try:
             break
 
         # Process frames and move them to GPU if available
-        optical_flow = process_frame(frame, prev_frame)
+        _, prev_frame_resized, optical_flow = process_frame(frame, prev_frame)
 
         # Draw optical flow vectors on the frame
         result_frame = draw_optical_flow(frame.copy(), optical_flow)
 
+        # Draw optical flow in color for visualization
+        color_optical_flow = draw_optical_flow_color(prev_frame_resized, optical_flow)  # Use resized previous frame here
+
         cv2.imshow('Optical Flow', result_frame)
+        cv2.imshow('Color Optical Flow', color_optical_flow)  # New window for color visualization
 
         # Update previous frame and break if 'q' is pressed
         prev_frame = frame
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
         end_time = time.time()
-        print(f"Frame processing time: {end_time - start_time:.3f}s")
+        #print(f"Frame processing time: {end_time - start_time:.3f}s")
 finally:
     cap.release()
     cv2.destroyAllWindows()
